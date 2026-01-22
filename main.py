@@ -27,6 +27,11 @@ async def startup():
     await tg_app.initialize()
 
 
+@app.get("/")
+async def health():
+    return "OK"
+
+
 @app.post("/webhook")
 async def telegram_webhook(request: Request):
     if request.headers.get("X-Telegram-Bot-Api-Secret-Token") != WEBHOOK_SECRET:

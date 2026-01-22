@@ -7,10 +7,9 @@ from telegram.ext import Application, CommandHandler, MessageHandler, ContextTyp
 
 from download import download_reel
 DEFAULT_DIR = "default"
-# TOKEN = os.environ["8288823206:AAExhwcNUL3kqd2PIFjq2_wFDb_guycQixY"]
-TOKEN = "8288823206:AAExhwcNUL3kqd2PIFjq2_wFDb_guycQixY"
-WEBHOOK_SECRET = os.environ.get("QUcb81SCq2WfPumKQaRptAuOUZAd811SRDcIWZVJU6gwEr7RqS7PvoLGHWGpUMoq", "any-secret")  # optional
 
+TOKEN = os.environ["BOT_TOKEN"]
+WEBHOOK_SECRET = os.environ["WEBHOOK_SECRET"]
 app = FastAPI()
 bot_app = Application.builder().token(TOKEN).build()
 

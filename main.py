@@ -27,6 +27,7 @@ async def telegram_webhook(request: Request):
         return {"ok": False}
 
     data = await request.json()
+    print(data)
     try:
         update = Update.de_json(data, tg_app.bot)
     except Exception as e:

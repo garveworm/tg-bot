@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 
+import json
 import os
 import time
 import random
-import argparse
 
 from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
@@ -18,25 +17,36 @@ SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
 RETRIABLE_STATUS_CODES = [500, 502, 503, 504]
 MAX_RETRIES = 10
 
+TOKEN_FILE = "token.json"
+
 
 def get_authenticated_service():
     creds = None
 
-    # Token is stored locally after first auth
-    if os.path.exists("token.json"):
-        creds = Credentials.from_authorized_user_file("token.json", SCOPES)
+    # Prefer env var (for deployed environments like Render)
+    token_json = os.environ.get("GOOGLE_TOKEN_JSON")
+    if token_json:
+        creds = Credentials.from_authorized_user_info(json.loads(token_json), SCOPES)
+    elif os.path.exists(TOKEN_FILE):
+        creds = Credentials.from_authorized_user_file(TOKEN_FILE, SCOPES)
 
-    # If not authenticated, do OAuth login
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
+    if not creds:
+        raise RuntimeError(
+            "No credentials found. Set GOOGLE_TOKEN_JSON env var or provide token.json."
+        )
+
+    if not creds.valid:
+        if creds.expired and creds.refresh_token:
             creds.refresh(Request())
+            # Persist refreshed token locally when running with a file
+            if not os.environ.get("GOOGLE_TOKEN_JSON"):
+                with open(TOKEN_FILE, "w") as f:
+                    f.write(creds.to_json())
         else:
-            flow = InstalledAppFlow.from_client_secrets_file(
-                "client_secrets.json", SCOPES)
-            creds = flow.run_local_server(port=8080)
-
-        with open("token.json", "w") as token:
-            token.write(creds.to_json())
+            raise RuntimeError(
+                "Credentials are invalid and cannot be refreshed. "
+                "Re-authenticate and update GOOGLE_TOKEN_JSON."
+            )
 
     return build("youtube", "v3", credentials=creds)
 

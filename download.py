@@ -1,4 +1,3 @@
-import sys
 from yt_dlp import YoutubeDL
 
 

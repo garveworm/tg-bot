@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 
 import json
+import logging
 import os
-import time
 import random
+import threading
+import time
 
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
@@ -11,19 +13,29 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaFileUpload
 
-# OAuth scope for uploading videos
-SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
+logger = logging.getLogger(__name__)
 
+SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
 RETRIABLE_STATUS_CODES = [500, 502, 503, 504]
 MAX_RETRIES = 10
-
 TOKEN_FILE = "token.json"
+
+# Cached service — built once, reused across requests
+_service = None
+_service_lock = threading.Lock()
 
 
 def get_authenticated_service():
+    global _service
+    with _service_lock:
+        if _service is None:
+            _service = _build_service()
+        return _service
+
+
+def _build_service():
     creds = None
 
-    # Prefer env var (for deployed environments like Render)
     token_json = os.environ.get("GOOGLE_TOKEN_JSON")
     if token_json:
         creds = Credentials.from_authorized_user_info(json.loads(token_json), SCOPES)
@@ -45,7 +57,6 @@ def get_authenticated_service():
                     "Run gen_token.py locally to get a new token, "
                     "then update GOOGLE_TOKEN_JSON on Render."
                 ) from e
-            # Persist refreshed token locally when running with a file
             if not os.environ.get("GOOGLE_TOKEN_JSON"):
                 with open(TOKEN_FILE, "w") as f:
                     f.write(creds.to_json())
@@ -66,74 +77,40 @@ def upload_video(youtube, file, title, description, category, keywords, privacy)
             "title": title,
             "description": description,
             "tags": tags,
-            "categoryId": category
+            "categoryId": category,
         },
         "status": {
-            "privacyStatus": privacy
-        }
+            "privacyStatus": privacy,
+        },
     }
 
     media = MediaFileUpload(file, chunksize=-1, resumable=True)
-
-    request = youtube.videos().insert(
-        part="snippet,status",
-        body=body,
-        media_body=media
-    )
-
-    return resumable_upload(request)
+    request = youtube.videos().insert(part="snippet,status", body=body, media_body=media)
+    return _resumable_upload(request)
 
 
-def resumable_upload(request):
+def _resumable_upload(request):
     response = None
     retry = 0
 
     while response is None:
         try:
-            print("Uploading...")
+            logger.info("Uploading chunk...")
             status, response = request.next_chunk()
-
             if response is not None:
-                print("Upload complete! Video ID:", response["id"])
-                return f'Upload complete! Video ID: {response["id"]}'
-
+                video_id = response["id"]
+                logger.info("Upload complete. Video ID: %s", video_id)
+                return f"Upload complete! Video ID: {video_id}"
         except HttpError as e:
             if e.resp.status in RETRIABLE_STATUS_CODES:
-                print("Retriable error:", e)
+                logger.warning("Retriable HTTP error %s: %s", e.resp.status, e)
             else:
                 raise
 
         retry += 1
         if retry > MAX_RETRIES:
-            raise Exception("Upload failed after multiple retries.")
+            raise RuntimeError("Upload failed after maximum retries.")
 
         sleep = random.random() * (2 ** retry)
-        print(f"Retrying in {sleep:.1f} seconds...")
+        logger.info("Retrying in %.1f seconds... (attempt %d/%d)", sleep, retry, MAX_RETRIES)
         time.sleep(sleep)
-
-
-if __name__ == "__main__":
-    # parser = argparse.ArgumentParser()
-    # parser.add_argument("--file", required=True)
-    # parser.add_argument("--title", default="Test Title")
-    # parser.add_argument("--description", default="Test Description")
-    # parser.add_argument("--category", default="22")
-    # parser.add_argument("--keywords", default="")
-    # parser.add_argument("--privacy", default="public",
-    #                     choices=["public", "private", "unlisted"])
-    #
-    # args = parser.parse_args()
-    #
-    # if not os.path.exists(args.file):
-    #     raise Exception("File does not exist.")
-
-    youtube = get_authenticated_service()
-    # upload_video(
-    #     youtube,
-    #     file=args.file,
-    #     title=args.title,
-    #     description=args.description,
-    #     category=args.category,
-    #     keywords=args.keywords,
-    #     privacy=args.privacy
-    # )

@@ -37,7 +37,14 @@ def get_authenticated_service():
 
     if not creds.valid:
         if creds.expired and creds.refresh_token:
-            creds.refresh(Request())
+            try:
+                creds.refresh(Request())
+            except Exception as e:
+                raise RuntimeError(
+                    f"Token refresh failed ({e}). "
+                    "Run gen_token.py locally to get a new token, "
+                    "then update GOOGLE_TOKEN_JSON on Render."
+                ) from e
             # Persist refreshed token locally when running with a file
             if not os.environ.get("GOOGLE_TOKEN_JSON"):
                 with open(TOKEN_FILE, "w") as f:
@@ -45,7 +52,7 @@ def get_authenticated_service():
         else:
             raise RuntimeError(
                 "Credentials are invalid and cannot be refreshed. "
-                "Re-authenticate and update GOOGLE_TOKEN_JSON."
+                "Run gen_token.py locally and update GOOGLE_TOKEN_JSON."
             )
 
     return build("youtube", "v3", credentials=creds)
@@ -74,7 +81,7 @@ def upload_video(youtube, file, title, description, category, keywords, privacy)
         media_body=media
     )
 
-    resumable_upload(request)
+    return resumable_upload(request)
 
 
 def resumable_upload(request):
@@ -88,7 +95,7 @@ def resumable_upload(request):
 
             if response is not None:
                 print("Upload complete! Video ID:", response["id"])
-                return
+                return f'Upload complete! Video ID: {response["id"]}'
 
         except HttpError as e:
             if e.resp.status in RETRIABLE_STATUS_CODES:

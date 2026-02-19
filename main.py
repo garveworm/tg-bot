@@ -27,10 +27,12 @@ def _require_env(name: str) -> str:
     return value
 
 
-# Fail fast at startup if any required config is missing
+# Always required
 BOT_TOKEN = _require_env("BOT_TOKEN")
-WEBHOOK_URL = _require_env("WEBHOOK_URL")        # e.g. https://tg-webhook-bot.onrender.com/webhook
-WEBHOOK_SECRET = _require_env("WEBHOOK_SECRET")  # any random secret string
+
+# Only required in webhook/deployed mode
+WEBHOOK_URL = os.environ.get("WEBHOOK_URL", "")        # e.g. https://tg-webhook-bot.onrender.com/webhook
+WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET", "")  # any random secret string
 
 tg_app = Application.builder().token(BOT_TOKEN).build()
 
@@ -90,6 +92,8 @@ tg_app.add_error_handler(error_handler)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    if not WEBHOOK_URL or not WEBHOOK_SECRET:
+        raise RuntimeError("WEBHOOK_URL and WEBHOOK_SECRET must be set in webhook mode")
     await tg_app.initialize()
     await tg_app.start()
     await tg_app.bot.set_webhook(WEBHOOK_URL, secret_token=WEBHOOK_SECRET)
@@ -116,3 +120,9 @@ async def telegram_webhook(request: Request):
 @app.get("/")
 async def health():
     return {"status": "ok"}
+
+
+if __name__ == "__main__":
+    # Local polling mode — no WEBHOOK_URL or WEBHOOK_SECRET needed
+    logger.info("Starting in polling mode...")
+    tg_app.run_polling(poll_interval=3)

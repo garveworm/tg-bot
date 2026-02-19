@@ -19,12 +19,3 @@ def download_reel(url: str, outdir: str = "."):
     }
     with YoutubeDL(ydl_opts) as ydl:
         ydl.download([url])
-
-
-if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: python save_reel.py <instagram_reel_url> [output_dir]")
-        sys.exit(1)
-    url = sys.argv[1]
-    outdir = sys.argv[2] if len(sys.argv) > 2 else "."
-    download_reel(url, outdir)

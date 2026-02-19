@@ -2,3 +2,6 @@
 __pycache__/*
 .idea
 keys
+token.json
+client_secrets.json
+default/

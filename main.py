@@ -46,13 +46,13 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Hello, send me an Instagram reel link")
 
 
-async def get_title(url: str) -> str:
+def get_title(url: str) -> str:
     r = requests.get(url)
     soup = BeautifulSoup(r.text, 'html.parser')
     desc = soup.find("meta", property="og:description")["content"]
     matches = re.findall(r': "([^"]*)"', desc)
-    if matches:
-        return matches[0]
+    if matches and matches[0]:
+        return matches[0][:70]
     return "Funny thing"
 
 
@@ -65,7 +65,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     tmpdir = tempfile.mkdtemp()
     try:
         await asyncio.to_thread(download_reel, text, tmpdir)
-        title = await asyncio.to_thread(get_title, text)
+        title = get_title(text)
 
         files = os.listdir(tmpdir)
         if not files:
@@ -74,13 +74,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         downloaded_file = os.path.join(tmpdir, files[0])
         youtube = get_authenticated_service()
-        n = random.randint(1, 1000)
 
         result = await asyncio.to_thread(
             upload_video,
             youtube,
             downloaded_file,
-            f'{title} {POPULAR_TAGS}',
+            title,
             POPULAR_TAGS,
             23,
             POPULAR_TAGS,

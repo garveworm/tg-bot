@@ -5,6 +5,9 @@ import random
 import shutil
 import tempfile
 from contextlib import asynccontextmanager
+import requests
+import re
+from bs4 import BeautifulSoup
 
 from fastapi import FastAPI, Request, Response
 from telegram import Update
@@ -34,11 +37,23 @@ BOT_TOKEN = _require_env("BOT_TOKEN")
 WEBHOOK_URL = os.environ.get("WEBHOOK_URL", "")        # e.g. https://tg-webhook-bot.onrender.com/webhook
 WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET", "")  # any random secret string
 
+POPULAR_TAGS = "#Shorts#YouTubeShorts#Viral#ShortsVideo#ShortsFeed"
+
 tg_app = Application.builder().token(BOT_TOKEN).build()
 
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Hello, send me an Instagram reel link")
+
+
+async def get_title(url: str) -> str:
+    r = requests.get(url)
+    soup = BeautifulSoup(r.text, 'html.parser')
+    desc = soup.find("meta", property="og:description")["content"]
+    matches = re.findall(r': "([^"]*)"', desc)
+    if matches:
+        return matches[0]
+    return "Funny thing"
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -50,6 +65,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     tmpdir = tempfile.mkdtemp()
     try:
         await asyncio.to_thread(download_reel, text, tmpdir)
+        title = await asyncio.to_thread(get_title, text)
 
         files = os.listdir(tmpdir)
         if not files:
@@ -64,11 +80,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             upload_video,
             youtube,
             downloaded_file,
-            f"default-test{n}",
-            f"default-description{n}",
+            f'{title} {POPULAR_TAGS}',
+            POPULAR_TAGS,
             23,
-            f"defaultkeyword{n}",
-            "private",
+            POPULAR_TAGS,
+            "public",
         )
 
         await update.message.reply_text(result)
